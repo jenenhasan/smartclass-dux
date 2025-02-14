@@ -1,11 +1,30 @@
 import asyncio
 import websockets
 import json
+import cv2
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate
+from aiortc.contrib.media import MediaStreamTrack
+
+# Create a MediaStreamTrack to capture video from the camera
+class VideoStreamTrack(MediaStreamTrack):
+    def __init__(self):
+        super().__init__()
+        self.cap = cv2.VideoCapture(0)  # Capture from the first camera (Raspberry Pi camera)
+
+    async def recv(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            raise Exception("Failed to capture frame")
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        return frame_rgb
 
 # Function to handle WebRTC signaling
 async def handle_webrtc_connection(websocket, path):
     peer_connection = RTCPeerConnection()
+
+    # Add the video track to the peer connection
+    video_track = VideoStreamTrack()
+    peer_connection.addTrack(video_track)
 
     @peer_connection.on("icecandidate")
     async def on_icecandidate(candidate):
@@ -34,9 +53,6 @@ async def handle_webrtc_connection(websocket, path):
                 )
                 await peer_connection.addIceCandidate(candidate)
 
-            # Since this is for streaming to a browser, you don't need to display locally on the Raspberry Pi.
-            # The browser will handle displaying the video stream.
-
     except Exception as e:
         print(f"Error: {e}")
     finally:
@@ -51,5 +67,3 @@ async def start_signaling_server():
 
 # Run WebSocket server
 asyncio.run(start_signaling_server())
-
-
